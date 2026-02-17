@@ -5,8 +5,8 @@ from sqlmodel import select
 from datetime import timedelta, datetime, timezone
 from app.database import SessionDep
 from fastapi.security import OAuth2PasswordBearer
-from typing import Annotated
-from fastapi import Depends, HTTPException, status
+from typing import Annotated, Any
+from fastapi import Depends, HTTPException, status, APIRouter
 import jwt
 from jwt.exceptions import InvalidTokenError
 
@@ -44,19 +44,22 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db:Ses
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub",None)
-        user_role = payload.get("role", None)
-        if user_id is None or user_role is None:
+        user_role: Any | None = payload.get("role", None)
+        if user_id is None:
             raise credentials_exception
     except InvalidTokenError:
         raise credentials_exception
-    user = None
-
-    if user_role == "admin":
-        user = db.get(Admin,user_id)
-    else:
-        user = db.get(RegularUser,user_id)
+    user = db.get(RegularUser, user_id)
     if user is None:
         raise credentials_exception
     return user
 
+auth_router = APIRouter(tags=["Authentication"])
+
+
+@auth_router.get("/identify", response_model=UserResponse)
+def get_user_by_id(db: SessionDep, user:AuthDep):
+    return user
+
 AuthDep = Annotated[User, Depends(get_current_user)]
+
